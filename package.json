@@ -1,0 +1,192 @@
+{
+  "name": "clickup-tasks",
+  "displayName": "ClickUp Tasks",
+  "description": "View your ClickUp in-progress tasks in the Source Control panel",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "views": {
+      "scm": [
+        {
+          "id": "clickupTasks",
+          "name": "ClickUp Tasks",
+          "when": "true"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "clickupTasks.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "clickupTasks.configure",
+        "title": "Configure ClickUp API",
+        "icon": "$(settings)"
+      },
+      {
+        "command": "clickupTasks.showLogs",
+        "title": "Show Logs",
+        "icon": "$(output)"
+      },
+      {
+        "command": "clickupTasks.debug",
+        "title": "Debug: Fetch Raw Task Data",
+        "icon": "$(debug)"
+      },
+      {
+        "command": "clickupTasks.debugListMyTasks",
+        "title": "Debug: List All My Tasks",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "clickupTasks.openTask",
+        "title": "Open in Browser"
+      },
+      {
+        "command": "clickupTasks.countdown",
+        "title": "5:00"
+      },
+      {
+        "command": "clickupTasks.playTask",
+        "title": "Start Time Tracking",
+        "icon": "$(play)"
+      },
+      {
+        "command": "clickupTasks.stopTask",
+        "title": "Stop Time Tracking",
+        "icon": "$(clock)"
+      },
+      {
+        "command": "clickupTasks.copyTaskIdFromItem",
+        "title": "Copy Task ID"
+      },
+      {
+        "command": "clickupTasks.openSettings",
+        "title": "Open Settings",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "clickupTasks.resetSettings",
+        "title": "Reset All Settings"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "clickupTasks.refresh",
+          "when": "view == clickupTasks",
+          "group": "navigation"
+        },
+        {
+          "command": "clickupTasks.openSettings",
+          "when": "view == clickupTasks",
+          "group": "navigation"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "clickupTasks.refresh",
+          "when": "view == clickupTasks",
+          "group": "navigation"
+        },
+        {
+          "command": "clickupTasks.configure",
+          "when": "view == clickupTasks",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "clickupTasks.openTask",
+          "when": "view == clickupTasks && viewItem == clickupTask",
+          "group": "inline"
+        },
+        {
+          "command": "clickupTasks.playTask",
+          "when": "view == clickupTasks && viewItem == clickupTask",
+          "group": "1_actions",
+          "title": "Start Time Tracking"
+        },
+        {
+          "command": "clickupTasks.stopTask",
+          "when": "view == clickupTasks && viewItem == clickupTaskTracked",
+          "group": "1_actions",
+          "title": "Stop Time Tracking"
+        },
+        {
+          "command": "clickupTasks.copyTaskIdFromItem",
+          "when": "view == clickupTasks && viewItem == clickupTask",
+          "group": "2_copy",
+          "title": "Copy Task ID"
+        },
+        {
+          "command": "clickupTasks.copyTaskIdFromItem",
+          "when": "view == clickupTasks && viewItem == clickupTaskTracked",
+          "group": "2_copy",
+          "title": "Copy Task ID"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ClickUp Tasks",
+      "properties": {
+        "clickupTasks.apiToken": {
+          "type": "string",
+          "default": "",
+          "description": "Your ClickUp API token",
+          "markdownDescription": "Your ClickUp API token. Get it from [ClickUp Settings > Apps > API](https://app.clickup.com/settings/apps)",
+          "secret": true
+        },
+        "clickupTasks.teamId": {
+          "type": "string",
+          "default": "",
+          "description": "Your ClickUp Team ID (optional, will use first team if not specified)"
+        },
+        "clickupTasks.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh tasks every 5 minutes"
+        },
+        "clickupTasks.inProgressStatuses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "in progress",
+            "active",
+            "working",
+            "in-progress"
+          ],
+          "description": "List of status names that indicate a task is in progress (case-insensitive). Add your workspace's custom status names here."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.74.0",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
+
+
