@@ -3,6 +3,11 @@
   "displayName": "ClickUp Tasks",
   "description": "View your ClickUp in-progress tasks in the Source Control panel",
   "version": "0.0.1",
+  "publisher": "muhammed-ikbal-akpaca",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mikbal54/vscode_clickup_tasks.git"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },

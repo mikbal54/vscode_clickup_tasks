@@ -27,12 +27,31 @@ A VS Code extension that displays your ClickUp in-progress tasks directly in the
 2. Generate or copy your API token
 3. The token should look like `pk_xxxxx...`
 
-### 2. Install the Extension
+### 2. Install the Extension Locally
 
-1. Open VS Code
-2. Go to Extensions (Ctrl+Shift+X)
-3. Install this extension
-4. Reload VS Code
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+2. **Compile the extension:**
+   ```bash
+   npm run compile
+   ```
+
+3. **Package the extension:**
+   ```bash
+   npx @vscode/vsce package --baseContentUrl https://github.com --baseImagesUrl https://github.com
+   ```
+   This creates a `.vsix` file (e.g., `clickup-tasks-0.0.1.vsix`) in the current directory.
+
+4. **Install the extension:**
+   - Open VS Code
+   - Go to Extensions (Ctrl+Shift+X)
+   - Click the `...` menu at the top of the Extensions panel
+   - Select "Install from VSIX..."
+   - Choose the generated `.vsix` file
+   - Reload VS Code when prompted
 
 ### 3. Configure
 
