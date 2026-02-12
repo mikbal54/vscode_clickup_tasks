@@ -86,12 +86,19 @@ export function activate(context: vscode.ExtensionContext) {
         return `${minutes}:${secs.toString().padStart(2, '0')}`;
     }
 
+    // Helper to get refresh interval in ms from settings
+    function getRefreshIntervalMs(): number {
+        const config = vscode.workspace.getConfiguration('clickupTasks');
+        const seconds = config.get<number>('autoRefreshDuration', 180);
+        return Math.max(1, seconds) * 1000;
+    }
+
     // Register countdown command (clicking it refreshes)
     const countdownCommand = vscode.commands.registerCommand('clickupTasks.countdown', () => {
         tasksProvider.refresh();
         const config = vscode.workspace.getConfiguration('clickupTasks');
         if (config.get<boolean>('autoRefresh', true)) {
-            startCountdown(5 * 60 * 1000);
+            startCountdown(getRefreshIntervalMs());
         }
     });
     context.subscriptions.push(countdownCommand);
@@ -100,7 +107,8 @@ export function activate(context: vscode.ExtensionContext) {
     function updateCountdown() {
         const now = Date.now();
         const timeRemaining = Math.max(0, Math.floor((nextRefreshTime - now) / 1000));
-        const countdownText = timeRemaining > 0 ? formatCountdown(timeRemaining) : '5:00';
+        const defaultDisplay = formatCountdown(getRefreshIntervalMs() / 1000);
+        const countdownText = timeRemaining > 0 ? formatCountdown(timeRemaining) : defaultDisplay;
         
         // Update view title to show countdown in the panel header
         // This appears near the refresh button in the view title area
@@ -139,7 +147,7 @@ export function activate(context: vscode.ExtensionContext) {
         // Reset countdown after manual refresh
         const config = vscode.workspace.getConfiguration('clickupTasks');
         if (config.get<boolean>('autoRefresh', true)) {
-            startCountdown(5 * 60 * 1000); // 5 minutes
+            startCountdown(getRefreshIntervalMs());
         }
     });
 
@@ -306,7 +314,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Auto-refresh if enabled
     const config = vscode.workspace.getConfiguration('clickupTasks');
-    const refreshInterval = 5 * 60 * 1000; // 5 minutes
+    const refreshInterval = getRefreshIntervalMs();
     
     if (config.get<boolean>('autoRefresh', true)) {
         // Start countdown timer
@@ -315,7 +323,7 @@ export function activate(context: vscode.ExtensionContext) {
         const interval = setInterval(() => {
             tasksProvider.refresh();
             // Reset countdown after auto refresh
-            startCountdown(refreshInterval);
+            startCountdown(getRefreshIntervalMs());
         }, refreshInterval);
 
         context.subscriptions.push({

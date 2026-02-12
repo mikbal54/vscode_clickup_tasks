@@ -3,7 +3,7 @@
   "displayName": "ClickUp Tasks",
   "description": "View your ClickUp in-progress tasks in the Source Control panel",
   "version": "0.0.1",
-  "publisher": "muhammed-ikbal-akpaca",
+  "publisher": "mikbal",
   "repository": {
     "type": "git",
     "url": "https://github.com/mikbal54/vscode_clickup_tasks.git"
@@ -161,7 +161,12 @@
         "clickupTasks.autoRefresh": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically refresh tasks every 5 minutes"
+          "description": "Automatically refresh tasks at the interval set by autoRefreshDuration"
+        },
+        "clickupTasks.autoRefreshDuration": {
+          "type": "number",
+          "default": 180,
+          "description": "Auto-refresh interval in seconds (default: 180)"
         },
         "clickupTasks.inProgressStatuses": {
           "type": "array",
@@ -175,6 +180,11 @@
             "in-progress"
           ],
           "description": "List of status names that indicate a task is in progress (case-insensitive). Add your workspace's custom status names here."
+        },
+        "clickupTasks.groupByList": {
+          "type": "boolean",
+          "default": true,
+          "description": "Group tasks by List in the tree view. When disabled, tasks are shown in a flat list."
         }
       }
     }

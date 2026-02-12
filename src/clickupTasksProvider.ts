@@ -36,6 +36,20 @@ function formatTime(milliseconds: number, includeSeconds: boolean = false): stri
     }
 }
 
+/** Tree item representing a List group (collapsible header). */
+export class ClickUpListGroupItem extends vscode.TreeItem {
+    constructor(
+        public readonly listId: string,
+        public readonly listName: string,
+        taskCount: number
+    ) {
+        super(listName, vscode.TreeItemCollapsibleState.Expanded);
+        this.contextValue = 'clickupListGroup';
+        this.description = `${taskCount} task${taskCount !== 1 ? 's' : ''}`;
+        this.iconPath = new vscode.ThemeIcon('list-unordered');
+    }
+}
+
 export class ClickUpTaskItem extends vscode.TreeItem {
     constructor(
         public readonly task: ClickUpTask | null,
@@ -72,12 +86,13 @@ export class ClickUpTaskItem extends vscode.TreeItem {
     }
 }
 
-export class ClickUpTasksProvider implements vscode.TreeDataProvider<ClickUpTaskItem> {
-    private _onDidChangeTreeData: vscode.EventEmitter<ClickUpTaskItem | undefined | null | void> = new vscode.EventEmitter<ClickUpTaskItem | undefined | null | void>();
-    readonly onDidChangeTreeData: vscode.Event<ClickUpTaskItem | undefined | null | void> = this._onDidChangeTreeData.event;
+export class ClickUpTasksProvider implements vscode.TreeDataProvider<ClickUpTaskItem | ClickUpListGroupItem> {
+    private _onDidChangeTreeData: vscode.EventEmitter<ClickUpTaskItem | ClickUpListGroupItem | undefined | null | void> = new vscode.EventEmitter<ClickUpTaskItem | ClickUpListGroupItem | undefined | null | void>();
+    readonly onDidChangeTreeData: vscode.Event<ClickUpTaskItem | ClickUpListGroupItem | undefined | null | void> = this._onDidChangeTreeData.event;
 
     private tasks: ClickUpTask[] = [];
     private loading: boolean = false;
+    private refreshSequence: number = 0;
     private updateInterval: NodeJS.Timeout | undefined;
 
     constructor(private clickUpService: ClickUpService) {
@@ -98,15 +113,23 @@ export class ClickUpTasksProvider implements vscode.TreeDataProvider<ClickUpTask
 
     refresh(): void {
         this.loading = true;
+        const thisRefresh = ++this.refreshSequence;
         this._onDidChangeTreeData.fire();
-        
+
         this.clickUpService.getInProgressTasks()
             .then(tasks => {
+                // Only apply if this is still the latest refresh (ignore stale responses)
+                if (thisRefresh !== this.refreshSequence) {
+                    return;
+                }
                 this.tasks = tasks;
                 this.loading = false;
                 this._onDidChangeTreeData.fire();
             })
             .catch(error => {
+                if (thisRefresh !== this.refreshSequence) {
+                    return;
+                }
                 console.error('ClickUpTasksProvider: Error loading tasks', error);
                 this.loading = false;
                 this._onDidChangeTreeData.fire();
@@ -158,75 +181,91 @@ export class ClickUpTasksProvider implements vscode.TreeDataProvider<ClickUpTask
         }
     }
 
-    getTreeItem(element: ClickUpTaskItem): vscode.TreeItem {
+    getTreeItem(element: ClickUpTaskItem | ClickUpListGroupItem): vscode.TreeItem {
         return element;
     }
 
-    getChildren(element?: ClickUpTaskItem): Thenable<ClickUpTaskItem[]> {
+    private buildTaskItem(task: ClickUpTask): ClickUpTaskItem {
+        let timeDisplay = '';
+        const internalElapsed = task.isCurrentlyTracked
+            ? this.clickUpService.getInternalTimerElapsed(task.id)
+            : 0;
+        const hasInternalTimer = internalElapsed > 0;
+        const hasTracked = task.timeTracked && task.timeTracked > 0;
+        const hasEstimate = task.time_estimate && task.time_estimate > 0;
+
+        if (hasInternalTimer || hasTracked || hasEstimate) {
+            const parts: string[] = [];
+            if (hasInternalTimer) {
+                parts.push(formatTime(internalElapsed, true));
+            }
+            if (hasTracked) {
+                const trackedFormatted = formatTime(task.timeTracked!);
+                parts.push(hasInternalTimer ? `+${trackedFormatted}` : trackedFormatted);
+            } else if (hasInternalTimer) {
+                parts.push('+0m');
+            }
+            if (hasEstimate) {
+                parts.push(`/${formatTime(task.time_estimate!)}`);
+            }
+            timeDisplay = `[${parts.join('')}]`;
+        }
+        const label = timeDisplay ? `${task.name} ${timeDisplay}` : task.name;
+        return new ClickUpTaskItem(task, label, vscode.TreeItemCollapsibleState.None);
+    }
+
+    getChildren(element?: ClickUpTaskItem | ClickUpListGroupItem): Thenable<(ClickUpTaskItem | ClickUpListGroupItem)[]> {
         if (this.loading) {
             const loadingItem = new ClickUpTaskItem(null, 'Loading...', vscode.TreeItemCollapsibleState.None);
             return Promise.resolve([loadingItem]);
         }
 
+        const groupByList = vscode.workspace.getConfiguration('clickupTasks').get<boolean>('groupByList', true);
+
         if (!element) {
-            // Root level - return all tasks
+            // Root level
             if (this.tasks.length === 0) {
                 const emptyItem = new ClickUpTaskItem(null, 'No "In Progress" tasks assigned to you', vscode.TreeItemCollapsibleState.None);
                 return Promise.resolve([emptyItem]);
             }
 
-            return Promise.resolve(
-                this.tasks.map(task => {
-                    // Format: "Task Name [internal_timer+time_spent/time_estimate]"
-                    // Example: "[2m30s+5m/2h]"
-                    let timeDisplay = '';
-                    
-                    // Get internal timer elapsed time if task is currently tracked
-                    const internalElapsed = task.isCurrentlyTracked 
-                        ? this.clickUpService.getInternalTimerElapsed(task.id) 
-                        : 0;
-                    const hasInternalTimer = internalElapsed > 0;
-                    
-                    const hasTracked = task.timeTracked && task.timeTracked > 0;
-                    const hasEstimate = task.time_estimate && task.time_estimate > 0;
-                    
-                    // Build the time display string
-                    if (hasInternalTimer || hasTracked || hasEstimate) {
-                        const parts: string[] = [];
-                        
-                        // Internal timer (with seconds for precision)
-                        if (hasInternalTimer) {
-                            parts.push(formatTime(internalElapsed, true));
-                        }
-                        
-                        // Time spent from API
-                        if (hasTracked) {
-                            const trackedFormatted = formatTime(task.timeTracked!);
-                            if (hasInternalTimer) {
-                                parts.push(`+${trackedFormatted}`);
-                            } else {
-                                parts.push(trackedFormatted);
-                            }
-                        } else if (hasInternalTimer) {
-                            // If we have internal timer but no tracked time, show +0m
-                            parts.push('+0m');
-                        }
-                        
-                        // Time estimate
-                        if (hasEstimate) {
-                            const estimateFormatted = formatTime(task.time_estimate!);
-                            parts.push(`/${estimateFormatted}`);
-                        }
-                        
-                        timeDisplay = `[${parts.join('')}]`;
+            if (groupByList) {
+                // Group tasks by list (list id -> tasks)
+                const byList = new Map<string, ClickUpTask[]>();
+                for (const task of this.tasks) {
+                    const listId = task.list?.id ?? '';
+                    const listName = task.list?.name ?? 'No list';
+                    if (!byList.has(listId)) {
+                        byList.set(listId, []);
                     }
-                    
-                    const label = timeDisplay 
-                        ? `${task.name} ${timeDisplay}`
-                        : task.name;
-                    return new ClickUpTaskItem(task, label, vscode.TreeItemCollapsibleState.None);
-                })
-            );
+                    byList.get(listId)!.push(task);
+                }
+                const listNames = new Map<string, string>();
+                for (const task of this.tasks) {
+                    const id = task.list?.id ?? '';
+                    if (!listNames.has(id)) listNames.set(id, task.list?.name ?? 'No list');
+                }
+                const entries = Array.from(byList.entries()).sort((a, b) => {
+                    const nameA = listNames.get(a[0]) ?? 'No list';
+                    const nameB = listNames.get(b[0]) ?? 'No list';
+                    if (nameA === 'No list') return 1;
+                    if (nameB === 'No list') return -1;
+                    return nameA.localeCompare(nameB);
+                });
+                const groupItems: ClickUpListGroupItem[] = entries.map(([listId, tasks]) => {
+                    const listName = listNames.get(listId) ?? 'No list';
+                    return new ClickUpListGroupItem(listId, listName, tasks.length);
+                });
+                return Promise.resolve(groupItems);
+            }
+
+            return Promise.resolve(this.tasks.map(task => this.buildTaskItem(task)));
+        }
+
+        if (element instanceof ClickUpListGroupItem) {
+            const listId = element.listId;
+            const listTasks = this.tasks.filter(t => (t.list?.id ?? '') === listId);
+            return Promise.resolve(listTasks.map(task => this.buildTaskItem(task)));
         }
 
         return Promise.resolve([]);

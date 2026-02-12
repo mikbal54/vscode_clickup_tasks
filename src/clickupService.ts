@@ -760,6 +760,7 @@ export class ClickUpService {
             const config = vscode.workspace.getConfiguration('clickupTasks');
             const teamId = config.get<string>('teamId', '');
             const targetTeamId = teamId || teams[0].id;
+            this.log(`Team ID (workspace): ${targetTeamId}${teamId ? ' (from settings)' : ' (first workspace from API)'}`);
 
             // Get current user ID first (needed for filtering)
             const currentUserId = await this.getCurrentUserId(client);
@@ -780,66 +781,16 @@ export class ClickUpService {
             ]).map(s => s.toLowerCase());
             this.log(`Looking for statuses: [${inProgressStatuses.join(', ')}]`);
 
-            // Get all tasks for the team
-            const tasks: ClickUpTask[] = [];
-            
-            // Get spaces for the team
-            const spacesResponse = await client.get(`/team/${targetTeamId}/space`);
-            const spaces = spacesResponse.data.spaces || [];
+            // Use Get Filtered Team Tasks API (assignees + statuses on server)
+            // Matches: GET /team/{id}/task?statuses[]=IN PROGRESS&assignees[]={userId}
+            const statusesForApi = inProgressStatuses.map(s => s.replace(/-/g, ' ').toUpperCase());
+            const tasks = await this.getTeamTasksAssignedToUser(client, targetTeamId, currentUserId, statusesForApi);
 
-            for (const space of spaces) {
-                try {
-                    // Get folders in the space
-                    const foldersResponse = await client.get(`/space/${space.id}/folder`);
-                    const folders = foldersResponse.data.folders || [];
-
-                    // Get lists from folders
-                    for (const folder of folders) {
-                        const listsResponse = await client.get(`/folder/${folder.id}/list`);
-                        const lists = listsResponse.data.lists || [];
-
-                        for (const list of lists) {
-                            const listTasks = await this.getTasksFromList(client, list.id, space, currentUserId);
-                            tasks.push(...listTasks);
-                        }
-                    }
-
-                    // Get lists directly in space (not in folders)
-                    const spaceListsResponse = await client.get(`/space/${space.id}/list`);
-                    const spaceLists = spaceListsResponse.data.lists || [];
-
-                    for (const list of spaceLists) {
-                        const listTasks = await this.getTasksFromList(client, list.id, space, currentUserId);
-                        tasks.push(...listTasks);
-                    }
-                } catch (error) {
-                    console.error(`Error fetching tasks from space ${space.id}:`, error);
-                }
-            }
-
-            // Filter tasks: assigned to current user AND status matches in-progress statuses
-            // Note: We filter client-side to ensure we catch all tasks regardless of API filtering quirks
+            // API returns only tasks in these statuses; keep client-side filter as fallback
             const filteredTasks = tasks.filter(task => {
-                // Check if task is assigned to current user
-                // Handle different assignee object structures from API
-                const assigneeIds = task.assignees?.map(assignee => {
-                    // API might return assignee.id as number or string, or assignee.user.id
-                    return String(assignee.id || assignee.user?.id || assignee.user_id || '');
-                }) || [];
-                
-                const isAssignedToMe = assigneeIds.some(assigneeId => assigneeId === currentUserId);
-                
-                if (!isAssignedToMe) {
-                    return false;
-                }
-
-                // Check if status matches any of the configured in-progress statuses (case-insensitive)
-                // Handle different status object structures
                 const statusValue = task.status?.status || task.status || '';
                 const status = String(statusValue).toLowerCase().trim();
-                const matches = inProgressStatuses.includes(status);
-                
-                return matches;
+                return inProgressStatuses.includes(status);
             });
             
             // Mark which task is currently being tracked
@@ -881,8 +832,8 @@ export class ClickUpService {
                 }
             }
             
-            // time_spent is already included in the task object from getTasksFromList
-            // It's in milliseconds according to ClickUp API documentation
+            // time_spent is already included in the task object from getTeamTasksAssignedToUser
+            this.log(`ClickUp get tasks: found ${tasks.length} task(s) from API (assigned to me), ${filteredTasks.length} task(s) in progress`);
             return filteredTasks;
         } catch (error: any) {
             if (error.response) {
@@ -893,6 +844,92 @@ export class ClickUpService {
             }
             throw error;
         }
+    }
+
+    /**
+     * Get tasks via Get Filtered Team Tasks API (assignees + statuses on server).
+     * https://developer.clickup.com/reference/getfilteredteamtasks
+     * Example: ?statuses[]=IN PROGRESS&assignees[]=100601468
+     */
+    private async getTeamTasksAssignedToUser(
+        client: AxiosInstance,
+        teamId: string,
+        assigneeId: string,
+        statuses: string[] = []
+    ): Promise<ClickUpTask[]> {
+        const allTasks: any[] = [];
+        let page = 0;
+        const pageSize = 100;
+        const paramsSerializer = (params: Record<string, unknown>) => {
+            const searchParams = new URLSearchParams();
+            Object.keys(params).forEach(key => {
+                const value = params[key];
+                if (Array.isArray(value)) {
+                    value.forEach(v => searchParams.append(`${key}[]`, String(v)));
+                } else {
+                    searchParams.append(key, String(value));
+                }
+            });
+            return searchParams.toString();
+        };
+
+        const baseParams: Record<string, unknown> = {
+            assignees: [assigneeId],
+            include_closed: false,
+            subtasks: true,
+            page: 0,
+        };
+        if (statuses.length > 0) {
+            baseParams.statuses = statuses;
+        }
+
+        while (true) {
+            const params = { ...baseParams, page };
+            const response = await client.get(`/team/${teamId}/task`, {
+                params,
+                paramsSerializer,
+            });
+            const tasks = response.data.tasks || [];
+            if (page === 0) {
+                this.log(`Get Filtered Team Tasks: assignees=[${assigneeId}], statuses=[${statuses.join(', ')}], got ${tasks.length} task(s) (page ${page + 1})`);
+            }
+            allTasks.push(...tasks);
+            if (tasks.length < pageSize) break;
+            page++;
+            if (page > 100) {
+                this.log(`WARNING: Reached pagination limit for team tasks`);
+                break;
+            }
+        }
+
+        // Deduplicate by task id (API can return same task in multiple lists or across pages)
+        const seenIds = new Set<string>();
+        const uniqueTasks = allTasks.filter(task => {
+            const id = String(task.id);
+            if (seenIds.has(id)) return false;
+            seenIds.add(id);
+            return true;
+        });
+        if (uniqueTasks.length < allTasks.length) {
+            this.log(`Deduplicated team tasks: ${allTasks.length} → ${uniqueTasks.length}`);
+        }
+
+        return uniqueTasks.map(task => {
+            let timeTracked = 0;
+            if (task.time_spent !== undefined && task.time_spent !== null) {
+                timeTracked = typeof task.time_spent === 'string'
+                    ? parseInt(task.time_spent, 10) || 0
+                    : Number(task.time_spent) || 0;
+            }
+            const spaceInfo = task.space
+                ? { id: task.space.id, name: task.space.name }
+                : undefined;
+            return {
+                ...task,
+                space: spaceInfo,
+                timeTracked,
+            } as ClickUpTask;
+        });
     }
 
     private async getTasksFromList(
