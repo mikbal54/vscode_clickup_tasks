@@ -17,7 +17,7 @@ function formatTime(milliseconds: number, includeSeconds: boolean = false): stri
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
     
-    if (includeSeconds && hours === 0 && minutes < 1) {
+    if (includeSeconds && hours === 0 && minutes < 1) { 
         // For very short durations, show seconds
         return `${seconds}s`;
     } else if (includeSeconds && hours === 0 && minutes > 0) {

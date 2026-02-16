@@ -2,11 +2,11 @@
   "name": "clickup-tasks",
   "displayName": "ClickUp Tasks",
   "description": "View your ClickUp in-progress tasks in the Source Control panel",
-  "version": "0.0.1",
-  "publisher": "mikbal",
+  "version": "0.1.0",
+  "publisher": "mikbal54",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mikbal54/vscode_clickup_tasks.git"
+    "url": "https://github.com/mikbal54/vscode_clickup_tasks"
   },
   "engines": {
     "vscode": "^1.74.0"
@@ -15,7 +15,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onView:clickupTasks"
   ],
   "main": "./out/extension.js",
   "contributes": {

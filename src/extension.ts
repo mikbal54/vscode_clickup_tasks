@@ -4,7 +4,7 @@ import { ClickUpService, ClickUpTask } from './clickupService';
 
 let clickUpService: ClickUpService;
 let tasksProvider: ClickUpTasksProvider;
-let outputChannel: vscode.OutputChannel;
+let outputChannel: vscode.OutputChannel | undefined;
 let refreshCountdownStatusBarItem: vscode.StatusBarItem | undefined;
 let refreshCountdownInterval: NodeJS.Timeout | undefined;
 let nextRefreshTime: number = 0;
@@ -56,10 +56,12 @@ function showAutoDismissNotification(
 }
 
 export function activate(context: vscode.ExtensionContext) {
-    // Create output channel for logging
-    outputChannel = vscode.window.createOutputChannel('ClickUp Tasks');
-    outputChannel.appendLine('ClickUp Tasks extension is now active!');
-    outputChannel.show(true); // Show output channel automatically for debugging
+    // Create output channel for logging only in development/debug mode
+    if (context.extensionMode === vscode.ExtensionMode.Development) {
+        outputChannel = vscode.window.createOutputChannel('ClickUp Tasks');
+        outputChannel.appendLine('ClickUp Tasks extension is now active!');
+        outputChannel.show(true); // Show output channel automatically for debugging
+    }
     
     console.log('ClickUp Tasks extension is now active!');
 
@@ -193,7 +195,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     const showLogsCommand = vscode.commands.registerCommand('clickupTasks.showLogs', () => {
-        outputChannel.show(true);
+        outputChannel?.show(true);
     });
 
     const debugCommand = vscode.commands.registerCommand('clickupTasks.debug', async () => {
@@ -256,7 +258,7 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
             
-            outputChannel.appendLine(`Starting time tracking for task: ${taskName} (${taskId})`);
+            outputChannel?.appendLine(`Starting time tracking for task: ${taskName} (${taskId})`);
             await clickUpService.startTimeTracking(taskId);
             
             showAutoDismissNotification(`Started time tracking for: ${taskName}`, 'information');
@@ -265,7 +267,7 @@ export function activate(context: vscode.ExtensionContext) {
             await tasksProvider.updateTask(taskId);
         } catch (error: any) {
             const errorMessage = error.message || 'Unknown error';
-            outputChannel.appendLine(`Error starting time tracking: ${errorMessage}`);
+            outputChannel?.appendLine(`Error starting time tracking: ${errorMessage}`);
             showAutoDismissNotification(`Failed to start time tracking: ${errorMessage}`, 'error');
         }
     });
@@ -280,12 +282,12 @@ export function activate(context: vscode.ExtensionContext) {
                 if (task) {
                     taskId = task.id;
                     const taskName = task.name || 'Unknown Task';
-                    outputChannel.appendLine(`Stopping time tracking for task: ${taskName}`);
+                    outputChannel?.appendLine(`Stopping time tracking for task: ${taskName}`);
                 }
             }
             
             if (!taskId) {
-                outputChannel.appendLine(`Stopping time tracking (no task specified)`);
+                outputChannel?.appendLine(`Stopping time tracking (no task specified)`);
             }
             
             const stoppedTaskId = await clickUpService.stopTimeTracking();
@@ -307,7 +309,7 @@ export function activate(context: vscode.ExtensionContext) {
             }
         } catch (error: any) {
             const errorMessage = error.message || 'Unknown error';
-            outputChannel.appendLine(`Error stopping time tracking: ${errorMessage}`);
+            outputChannel?.appendLine(`Error stopping time tracking: ${errorMessage}`);
             showAutoDismissNotification(`Failed to stop time tracking: ${errorMessage}`, 'error');
         }
     });
